@@ -1,149 +1,125 @@
-Abstract: 
-Forecasting Equipment Failures in Industrial IoT Environments 
-This study addresses the critical challenge of unplanned equipment failures in industrial IoT (or IIoT) 
-environments, which often result in significant downtime and increased maintenance costs. Using the NASA 
-Commercial Modular Aero-Propulsion System Simulation (aka C-MAPSS) dataset, models were developed to 
-predict the Remaining Useful Life (RUL) of aircraft engines based on sensor data collected under various 
-operating conditions. The project pipeline includes data preprocessing, feature engineering, and model 
-training with cross-validation. Five machine learning regression models were compared: Linear Regression, 
-Ridge Regression, Random Forest, xgBoost, and LightGBM and their performance was evaluated using Root 
-Mean Square Error (RMSE), Mean Absolute Error (MAE), and a custom PHM08 scoring function. This project 
-aims to contribute to the development of effective predictive maintenance strategies for industrial equipment, 
-which can substantially reduce operational costs and improve system reliability. 
+# Forecasting Equipment Failures in Industrial IoT Environments
 
+## Overview
 
-Introduction: 
-In today's industrial operations, unexpected equipment failures can lead to substantial economic losses 
-through production downtime, emergency maintenance costs, and potential safety hazards. To address this, 
-NASA released the C-MAPSS dataset which provides run-to-failure data for turbofan engines operating under 
-various conditions. 
+This project addresses the challenge of unplanned equipment failures in Industrial IoT (IIoT) environments using machine learning to predict the **Remaining Useful Life (RUL)** of aircraft engines. Using NASA's C-MAPSS dataset, the pipeline covers data preprocessing, feature engineering, and model training with cross-validation across both regression and classification tasks.
 
-Predictive maintenance offers several advantages over traditional maintenance strategies: 
-• Reduction in unplanned downtime
+---
 
-• Optimization of maintenance scheduling
+## Dataset
 
-• Extension of equipment lifespan
+**NASA C-MAPSS (Commercial Modular Aero-Propulsion System Simulation)**
 
-• Decrease in overall maintenance costs  
+Each engine begins with different degrees of initial wear and manufacturing variation, operates normally, develops a fault, and eventually fails. The dataset includes:
 
-• Improvement in operational efficiency and safety 
+| Field | Description |
+|---|---|
+| Unit number | Unique engine identifier |
+| Time cycles | Number of operational cycles completed |
+| Operational settings | 3 settings influencing engine performance |
+| Sensor measurements | 21 sensor readings per cycle (temperature, pressure, fan speed, etc.) |
 
+**Splits:**
+- `train_FD001` — Complete run-to-failure sensor data
+- `test_FD001` — Sensor data up to a point before failure
+- `RUL_FD001` — Ground truth RUL values for the test set
 
-Dataset: 
-To address the problem of unexpected equipment failures, NASA released the C-MAPSS dataset which provides 
-run-to-failure data for turbofan engines operating under various conditions. 
+---
 
-Each engine starts with different degrees of initial wear and manufacturing variation, making the dataset 
-realistic and challenging. The engines operate normally at the start of each time series and develop a fault at 
-some point, which then grows in magnitude until system failure. The dataset contains the following 
-components: 
+## Methodology
 
-• Unit number: Unique identifier for each engine 
+### Data Preprocessing
+- **Feature selection:** 7 near-constant sensors (s_1, s_5, s_6, s_10, s_16, s_18, s_19) were removed after correlation analysis
+- **RUL calculation:** `RUL = max_time_cycle - current_time_cycle`
+- **Normalization:** MinMaxScaler applied to all features
+- **RUL clipping:** Values clipped at 195 cycles to focus on degradation patterns near failure
 
-• Time cycles: Number of operational cycles completed 
+### Feature Engineering
+- **Moving averages:** 10-cycle rolling means computed per sensor to reduce noise and highlight degradation trends
+- **Risk categorization** (for classification):
 
-• Operational settings: Three operational settings that influence engine performance 
+| Risk Zone | RUL Range |
+|---|---|
+| 🔴 RISK ZONE | ≤ 68 cycles |
+| 🟡 MODERATED RISK | 69–137 cycles |
+| 🟢 NO RISK | > 137 cycles |
 
-• Sensor measurements: 21 sensor readings (e.g., temperature, pressure, fan speed) for each cycle 
+### Models
 
-The dataset is structured as: 
-• Training data: Contains complete run-to-failure sensor data for multiple engines (train_FD001) 
+**Regression** (predicting exact RUL):
+- Linear Regression *(baseline)*
+- Ridge Regression *(L2 regularization)*
+- Random Forest Regressor
+- XGBoost Regressor
+- LightGBM Regressor
 
-• Test data: Contains sensor data up to a certain point before failure (test_FD001) 
+**Classification** (predicting risk category):
+- Random Forest Classifier
+- XGBoost Classifier
+- Naive Bayes
+- K-Nearest Neighbors (KNN)
 
-• Ground truth RUL values for the test data (RUL_FD001) 
-Figure 1 illustrates the distribution of engine lifetimes in the training dataset. 
+### Evaluation
+- **Regression:** RMSE, R² Score
+- **Classification:** Accuracy, Confusion Matrix, Precision/Recall/F1
+- **Validation:** 4-fold cross-validation for all models
 
+---
 
-Methodology: 
+## Results
 
-Data Preprocessing: 
-Initial exploration of the dataset revealed several challenges that had to be addressed: 
+### Regression
 
-• Feature selection: Not all sensors showed variation with increasing cycles, indicating they provided little 
-information about engine degradation. After correlation analysis, seven sensor channels (s_1, s_5, s_6, 
-s_10, s_16, s_18, s_19) were identified as constant or near-constant and were removed from further 
-analysis. 
+| Model | RMSE (Train) | RMSE (Test) | RMSE (Validation) |
+|---|---|---|---|
+| LightGBM | 25.661 | **30.280** | 37.918 |
+| Random Forest | 25.722 | 30.432 | 37.936 |
+| XGBoost | **6.370** | 30.482 | **35.286** |
+| Ridge Regression | 35.422 | 36.203 | 45.931 |
+| Linear Regression | 35.422 | 36.207 | 45.982 |
 
-• RUL calculation: For the training data, RUL values were calculated by subtracting the current cycle from 
-the maximum cycle for each engine:  
+**Key observations:**
+- **LightGBM** achieves the lowest test RMSE (30.280), making it the best generalizer
+- **XGBoost** shows significant overfitting (train RMSE 6.370 vs. validation RMSE 35.286)
+- Ridge Regression offers no meaningful improvement over Linear Regression, suggesting L2 regularization doesn't address the core issue in this dataset
+- Most predictive features: rolling averages of **s_2, s_3, s_4, s_7** (temperature and pressure sensors)
 
-• RUL = max_time_cycle - current_time_cycle 
+### Classification
 
-• Data normalization: To ensure model performance, all features were scaled using MinMaxScaler to 
-bring values into a consistent range. 
+| Model | Test Accuracy | Validation Accuracy |
+|---|---|---|
+| XGBoost | 0.722 | 0.450 |
+| Random Forest | 0.719 | 0.480 |
+| LightGBM | 0.714 | 0.420 |
+| KNN | 0.671 | 0.600 |
+| Naive Bayes | 0.645 | **0.620** |
 
-• RUL clipping: Analysis of RUL distribution showed very high values for early cycles of long-lasting 
-engines. Since degradation patterns are typically more evident closer to failure, RUL values were 
-clipped at 195 cycles to improve model performance. 
+**Key observations:**
+- Tree-based models show heavy overfitting on classification tasks
+- **Naive Bayes** and **KNN** generalize much better, with more consistent test/validation performance
 
-Feature Engineering: 
-To enhance the predictive power of the models, several feature engineering techniques were applied: 
+---
 
-• Moving Averages: To reduce the noise in sensor readings and highlight degradation trends, 10-cycle 
-rolling means were calculated for each sensor. This reduced the impact of measurement noise while 
-preserving the underlying degradation patterns. 
+## Conclusions
 
-• Derived Features: The code includes calculation of various statistics and derived features based on the 
-sensor readings. 
+- Ensemble methods (LightGBM, Random Forest) outperform linear models for RUL regression, but suffer overfitting in classification
+- Temperature and pressure sensors are the strongest predictors of remaining useful life
+- The methodology is transferable to other IIoT predictive maintenance settings
 
-• Risk Categorization: For classification models, RUL values were transformed into three risk categories: 
-RISK ZONE: RUL ≤ 68 cycles 
-MODERATED RISK: 69 < RUL ≤ 137 cycles 
-NO RISK: RUL > 137 cycles 
+---
 
-These thresholds were determined by analyzing the distribution of RUL values in the training data to create 
-approximately balanced classes. 
+## Future Scope
 
+- **Deep learning:** LSTM networks to capture complex temporal patterns in sensor data
+- **Transfer learning:** Adapting knowledge across different engine types with limited training data
+- **Uncertainty quantification:** Providing confidence bounds on predictions for more robust maintenance planning
 
-Model Development: 
-Both regression and classification approaches were implemented to address different aspects of the predictive 
-maintenance problem: 
+---
 
-Regression: 
-The following regression models were implemented to predict the exact RUL value: 
-• Linear Regression: A custom implementation of linear regression was used as a baseline model. 
+## References
 
-• Ridge Regression: Linear regression with L2 regularization to prevent overfitting. Hyperparameter 
-tuning was performed to determine the optimal alpha value. 
-
-• Random Forest Regressor: An ensemble of decision trees with hyperparameter optimization for the 
-number of estimators and maximum depth. 
-
-• XGBoost Regressor: A gradient boosting framework optimized for computational speed and model 
-performance. 
-
-• LightGBM Regressor: A gradient boosting framework that uses a leaf-wise tree growth strategy. 
-
-
-Classification 
-For the classification task, the models were trained to predict the risk category of each engine: 
-• Random Forest Classifier: Ensemble of decision trees for classification 
-
-• XGBoost Classifier: Gradient boosting algorithm adapted for multi-class classification. 
-
-• Naive Bayes: Probabilistic classifier based on Bayes' theorem. 
-
-• K-Nearest Neighbors: Instance-based learning algorithm. 
-
-
-Evaluation Metrics:
-
-For Regression Models: 
-• Root Mean Square Error (RMSE): Measures the square root of the average squared difference 
-between predicted and actual RUL values 
-
-• R² Score: Indicates the proportion of variance in the dependent variable predictable from the 
-independent variables 
-
-For Classification Models: 
-• Accuracy: The proportion of correct predictions 
-
-• Confusion Matrix: Visualizes true versus predicted classes 
-
-• Classification Report: Provides precision, recall, and F1-score for each class 
-
-Cross-Validation 
-To ensure robust model evaluation, k-fold cross-validation was implemented with k=4. This technique helps to 
-assess how the model would perform on unseen data and reduces the risk of overfitting.
+- Saxena et al. (2008). Damage propagation modeling for aircraft engine run-to-failure simulation. *PHM Conference*, IEEE.
+- Chen & Guestrin (2016). XGBoost: A scalable tree boosting system. *KDD 2016*.
+- Breiman (2001). Random forests. *Machine Learning, 45*(1), 5–32.
+- Ke et al. (2017). LightGBM: A highly efficient gradient boosting decision tree. *NeurIPS 30*.
+- Heng et al. (2009). Rotating machinery prognostics: State of the art, challenges and opportunities. *Mechanical Systems and Signal Processing, 23*(3), 724–739.
